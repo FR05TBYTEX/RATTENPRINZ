@@ -170,14 +170,14 @@ def download_file(s, seq, remote_filepath: str) -> bool:
             file_name, file_size, file_hash = unpack_metadata       # UNPACK METADATA
             file_size = int(file_size)                              # SET FILE_SIZE AS TYPE INT
 
-            print(f'unpacked metadata: {metadata}')
+            vprint(f'unpacked metadata: {metadata}')
 
-            file_bytes = b''                                        # DECLARE NEW BYTES OBJECT
+            file_bytes = bytearray()                                # DECLARE BYTEARRAY FOR APPENDING
             file_bytes_recv = 0                                     # RECEIVES AND COLLECTS LENGTH OF UPLOADED BYTES
             while file_bytes_recv < file_size:                      # WHILE LOOP TO KEEP RECEIVING BYTES UNTIL RECEIVED BYTES == EXPECTED FILE SIZE
                 response = recv_packet(s)
                 if response[0] == MT_DATA:
-                    file_bytes += response[4]
+                    file_bytes.extend(response[4])
                     file_bytes_recv += len(response[4])
                 
                 else:
@@ -200,6 +200,7 @@ def download_file(s, seq, remote_filepath: str) -> bool:
             else:
                 print('--- METADATA MISMATCH! ---')
                 vprint(f'LOCAL METADATA: {local_metadata} | REMOTE METADATA: {metadata}')
+                return False
 
 
         else:

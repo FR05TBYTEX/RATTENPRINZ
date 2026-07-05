@@ -13,7 +13,7 @@ HEADER - ![HEADER](assets/RATTENPRINZ_HEADER.png)
 *Packet flow* begins with the revshell connecting back to a listening socket on the C2/listener and beaconing, followed by rudimentary authentication enabled by message types which then enables commands to be sent from the C2/listener through to the revshell to be executed on the RHOST, with output sent back to the C2/listener and displayed to the LHOST. 
 PACKET FLOW - ![PFLOW](assets/RATTENPRINZ_PACKET_FLOW.png)
 
-**MESSAGE TYPES**:
+###MESSAGE TYPES:
 ```MT_BEACON 	= 0
 MT_AUTH 	= 1
 MT_CMD		= 2
@@ -21,14 +21,15 @@ MT_RECV		= 3
 MT_UP		= 4
 MT_DWN		= 5
 MT_DATA		= 6
-MT_ERR		= 7```
+MT_ERR		= 7
+```
 
 **NB.** The following *GLOBAL VARIABLES* should be edited if one wishes to use the scripts:
-C2_IP (revshell.py)
+```C2_IP (revshell.py)
 C2_PORT (revshell.py)
 LHOST (c2.py)
-
-One may also edit the XOR_KEY, though since XOR is more obfuscation than 'encryption', there isn't much point.
+```
+One may also edit the `XOR_KEY`, though since XOR is more obfuscation than 'encryption', there isn't much point.
 
 ## Ethical Use Policy
 

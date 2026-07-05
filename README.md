@@ -5,7 +5,7 @@ RATTENPRINZ (Rat Prince) is a paired revshell with C2/listener written in Python
 
 The shell is relatively stable, with auto-reconnect if the user CTRL+C's out - this somewhat mitigates common issues with shells hanging or randomly disconnecting. Auto-reconnect is enabled by the revshell.py beaconing out every few seconds with a jitter applied to randomize beacon timing. 
 
-File upload (C2/listener -> revshell) and file download (revshell -> C2/listener) is supported through the *'upload'* and *'download'* commands. Local shell history (i.e. what commands the user issued the shell) can be accessed by typing *'lhistory'*. 
+File upload (C2/listener -> revshell) and file download (revshell -> C2/listener) is supported through the *'UPLOAD'* and *'DOWNLOAD'* commands. RATTENPRIZN shell history can be accessed by typing *'LHISTORY'*. 
 
 *Communication* between the LHOST (C2/listener) and the RHOST (revshell) uses a custom binary protocol - a simple [TLV](https://en.wikipedia.org/wiki/Type–length–value) (Type-Length-Value) encoding scheme, with a header of 5 bytes: 1 byte for the **MESSAGE TYPE** and 4 bytes for the **PAYLOAD LENGTH**, followed by the full **PAYLOAD**, which is encoded using an *XOR CIPHER*. 
 ![HEADER](assets/RATTENPRINZ_HEADER.png)
@@ -26,11 +26,15 @@ MT_ERR		= 7
 ```
 
 **NB.** The following *GLOBAL VARIABLES* should be edited if one wishes to use the scripts:
-```C2_IP (revshell.py)
+```
+C2_IP (revshell.py)
 C2_PORT (revshell.py)
 LHOST (c2.py)
 ```
-One may also edit the `XOR_KEY`, though since XOR is more obfuscation than 'encryption', there isn't much point.
+One may also edit the `XOR_KEY` (found in both scripts), though since XOR is more obfuscation than 'encryption', it won't have any meaningful effect. 
+
+### MISC
+WRT encryption - an effort was made to use [Elliptic Curve Diffie-Hellman Key Exchange](https://cryptobook.nakov.com/asymmetric-key-ciphers/ecdh-key-exchange) and a barely-viable working version was layered on top of comms, but it required the [cryptography module](https://cryptography.io/en/latest/hazmat/primitives/asymmetric/ec/), at least on the client side (LHOST C2/listener), which made this project overly complex and no longer 'lightweight'. In any case, initializing the keys took far too long computationally, which felt like bloat and a reduced user experience. Thus simple XOR was chosen to provide some bare minimum obfuscation.  
 
 ## Ethical Use Policy
 

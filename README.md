@@ -7,14 +7,15 @@ The shell is relatively stable, with auto-reconnect if the user CTRL+C's out - t
 
 File upload (C2/listener -> revshell) and file download (revshell -> C2/listener) is supported through the *'upload'* and *'download'* commands. Local shell history (i.e. what commands the user issued the shell) can be accessed by typing *'lhistory'*. 
 
-*Communication* between the LHOST (C2/listener) and the RHOST (revshell) uses a custom binary protocol - a simple [TLV](https://en.wikipedia.org/wiki/Type–length–value) (Type-Length-Value) encoding scheme, with a header of 5 bytes: 1 byte for the **MESSAGE TYPE** and 4 bytes for the **PAYLOAD LENGTH**, which is followed by the full **PAYLOAD**. 
+*Communication* between the LHOST (C2/listener) and the RHOST (revshell) uses a custom binary protocol - a simple [TLV](https://en.wikipedia.org/wiki/Type–length–value) (Type-Length-Value) encoding scheme, with a header of 5 bytes: 1 byte for the **MESSAGE TYPE** and 4 bytes for the **PAYLOAD LENGTH**, followed by the full **PAYLOAD**, which is encoded using an *XOR CIPHER*. 
 ![HEADER](assets/RATTENPRINZ_HEADER.png)
 
 *Packet flow* begins with the revshell connecting back to a listening socket on the C2/listener and beaconing, followed by rudimentary authentication enabled by message types which then enables commands to be sent from the C2/listener through to the revshell to be executed on the RHOST, with output sent back to the C2/listener and displayed to the LHOST. 
 ![PFLOW](assets/RATTENPRINZ_PACKET_FLOW.png)
 
 ### MESSAGE TYPES:
-```MT_BEACON 	= 0
+```
+MT_BEACON 	= 0
 MT_AUTH 	= 1
 MT_CMD		= 2
 MT_RECV		= 3

@@ -53,10 +53,6 @@ def beacon():
         print(e)
         return None
 
-def signal_handler(signum, frame):
-    print('\n=== SHUTTING DOWN... ===')
-    sys.exit(0)
-
 def run_cmd(cmd: str) -> bytes:
     cmd = cmd.decode()
     try:
